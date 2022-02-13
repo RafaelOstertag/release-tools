@@ -215,12 +215,13 @@ is_valid_semantic_version_or_fail() {
 }
 
 read_release_version() {
-  echo_prompt "New release version: "
+  local proposed_version="$1"
+
+  echo_prompt "New release version [${proposed_version}]: "
   read -r NEW_VERSION
 
   if [ -z "${NEW_VERSION}" ]; then
-    echo_error "No release version specified"
-    exit 1
+    NEW_VERSION="${proposed_version}"
   fi
 
   echo "${NEW_VERSION}"
@@ -346,6 +347,13 @@ version_to_next_development_version() {
   return 0
 }
 
+current_version_to_release_version() {
+  local current_version
+
+  current_version="$(_read_current_version_from_manifest)"
+  echo "${current_version}" | sed -E "s/${DEV_VERSION_SUFFIX_NPM}|${DEV_VERSION_SUFFIX_MAVEN}//"
+}
+
 preflight_checks() {
   if _is_maven_project
   then
@@ -373,7 +381,8 @@ preflight_checks
 
 # Get versions
 print_current_version
-RELEASE_VERSION="$(read_release_version)"
+PROPOSED_RELEASE_VERSION="$(current_version_to_release_version)"
+RELEASE_VERSION="$(read_release_version "${PROPOSED_RELEASE_VERSION}")"
 is_valid_semantic_version_or_fail "${RELEASE_VERSION}"
 
 PROPOSED_DEV_VERSION="$(version_to_next_development_version "${RELEASE_VERSION}")"
