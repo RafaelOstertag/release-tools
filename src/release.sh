@@ -328,7 +328,7 @@ commit_and_push_release_version() {
 
 commit_and_push_development_version() {
   echo_info "Commit ${DEV_BRANCH} branch"
-  git commit -a -m "Prepare next development cycle" >/dev/null
+  git commit -a -m "Prepare next development cycle [ci skip]" >/dev/null
   echo_info "Push ${DEV_BRANCH} branch"
   git push origin "${DEV_BRANCH}"
 }
