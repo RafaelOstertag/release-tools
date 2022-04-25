@@ -6,6 +6,7 @@ DEV_VERSION_SUFFIX_MAVEN="-SNAPSHOT"
 DEV_VERSION_SUFFIX_NPM="-dev"
 MAIN_BRANCH="master"
 DEV_BRANCH="develop"
+HOOKS_DIR=".release.sh/hooks"
 
 ##
 ## these functions are supposed to be called from other functions only
@@ -372,6 +373,24 @@ preflight_checks() {
   _has_git_remote_or_fail
 }
 
+execute_hooks() {
+  if [ ! -d "${HOOKS_DIR}" ]
+  then
+    echo_info "No hooks detected in ${HOOKS_DIR}"
+    return 0
+  fi
+
+  for hook in "${HOOKS_DIR}"/*.sh
+  do
+    if [ -x "$hook" ]
+    then
+      echo_info "Running hook $hook"
+      $hook
+    fi
+  done
+  return 0
+}
+
 
 ##
 ## main
@@ -391,6 +410,9 @@ is_valid_development_version_or_fail "${DEVELOPMENT_VERSION}"
 
 # Roll release
 merge_develop_into_main
+
+execute_hooks
+
 set_manifest_version "${RELEASE_VERSION}"
 commit_and_push_release_version "${RELEASE_VERSION}"
 
