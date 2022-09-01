@@ -123,8 +123,7 @@ _has_git_remote_or_fail() {
   local remotes
 
   remotes="$(git remote)"
-  if [[ -z "${remotes}" ]]
-  then
+  if [[ -z "${remotes}" ]]; then
     echo_error "Git repository has no remotes defined"
     exit 1
   else
@@ -133,37 +132,33 @@ _has_git_remote_or_fail() {
 }
 
 _detect_main_branch() {
- local all_branches
+  local all_branches
 
- all_branches="$(_list_all_branches)"
- for branch_name in trunk master main
- do
-   if echo "${all_branches}" | grep "^${branch_name}\$" >/dev/null 2>&1
-   then
-     echo "${branch_name}"
-     return 0
+  all_branches="$(_list_all_branches)"
+  for branch_name in trunk master main; do
+    if echo "${all_branches}" | grep "^${branch_name}\$" >/dev/null 2>&1; then
+      echo "${branch_name}"
+      return 0
     fi
- done
+  done
 
- echo_error "Unable to find 'trunk', 'master', or 'main' branch in repository"
- exit 1
+  echo_error "Unable to find 'trunk', 'master', or 'main' branch in repository"
+  exit 1
 }
 
 _detect_develop_branch() {
- local all_branches
+  local all_branches
 
- all_branches="$(_list_all_branches)"
- for branch_name in dev develop development
- do
-   if echo "${all_branches}" | grep "^${branch_name}\$" >/dev/null 2>&1
-   then
-     echo "${branch_name}"
-     return 0
+  all_branches="$(_list_all_branches)"
+  for branch_name in dev develop development; do
+    if echo "${all_branches}" | grep "^${branch_name}\$" >/dev/null 2>&1; then
+      echo "${branch_name}"
+      return 0
     fi
- done
+  done
 
- echo_error "Unable to find 'dev', 'develop', or 'develop' branch in repository"
- exit 1
+  echo ""
+  return 0
 }
 
 _detect_branches() {
@@ -171,7 +166,11 @@ _detect_branches() {
   echo_pass "Detected main branch '${MAIN_BRANCH}'"
 
   DEV_BRANCH="$(_detect_develop_branch)"
-  echo_pass "Detected development branch '${DEV_BRANCH}'"
+  if [ -n "${DEV_BRANCH}" ]; then
+    echo_pass "Detected development branch '${DEV_BRANCH}'"
+  else
+    echo_info "No development branch detected. Assume release is triggered when pushing release tag."
+  fi
 }
 
 _check_required_commands_maven() {
@@ -285,6 +284,14 @@ merge_develop_into_main() {
   git merge --no-ff "${DEV_BRANCH}" </dev/null >/dev/null
 }
 
+ensure_main_branch() {
+  if ! _is_branch "${MAIN_BRANCH}"; then
+    echo_error "Not on branch '${MAIN_BRANCH}'"
+  fi
+
+  _is_repo_clean_or_fail
+}
+
 merge_main_into_develop() {
   if ! _is_branch "${MAIN_BRANCH}"; then
     echo_error "not on branch '${MAIN_BRANCH}'"
@@ -328,10 +335,21 @@ commit_and_push_release_version() {
 }
 
 commit_and_push_development_version() {
-  echo_info "Commit ${DEV_BRANCH} branch"
+  local current_branch
+
+  if [ -n "${DEV_BRANCH}" ]
+  then
+    _is_branch "${DEV_BRANCH}"
+    current_branch="${DEV_BRANCH}"
+  else
+    _is_branch "${MAIN_BRANCH}"
+    current_branch="${MAIN_BRANCH}"
+  fi
+
+  echo_info "Commit ${current_branch} branch"
   git commit -a -m "Prepare next development cycle [ci skip]" >/dev/null
-  echo_info "Push ${DEV_BRANCH} branch"
-  git push origin "${DEV_BRANCH}"
+  echo_info "Push ${current_branch} branch"
+  git push origin "${current_branch}"
 }
 
 version_to_next_development_version() {
@@ -356,12 +374,10 @@ current_version_to_release_version() {
 }
 
 preflight_checks() {
-  if _is_maven_project
-  then
+  if _is_maven_project; then
     echo_pass "$(pwd) is a maven project"
     _check_required_commands_maven
-  elif _is_npm_project
-  then
+  elif _is_npm_project; then
     echo_pass "$(pwd) is a npm project"
     _check_required_commands_npm
   else
@@ -374,23 +390,19 @@ preflight_checks() {
 }
 
 execute_hooks() {
-  if [ ! -d "${HOOKS_DIR}" ]
-  then
+  if [ ! -d "${HOOKS_DIR}" ]; then
     echo_info "No hooks detected in ${HOOKS_DIR}"
     return 0
   fi
 
-  for hook in "${HOOKS_DIR}"/*.sh
-  do
-    if [ -x "$hook" ]
-    then
+  for hook in "${HOOKS_DIR}"/*.sh; do
+    if [ -x "$hook" ]; then
       echo_info "Running hook $hook"
       $hook
     fi
   done
   return 0
 }
-
 
 ##
 ## main
@@ -409,7 +421,11 @@ DEVELOPMENT_VERSION="$(read_development_version "${PROPOSED_DEV_VERSION}")"
 is_valid_development_version_or_fail "${DEVELOPMENT_VERSION}"
 
 # Roll release
-merge_develop_into_main
+if [ -n "${DEV_BRANCH}" ]; then
+  merge_develop_into_main
+else
+  ensure_main_branch
+fi
 
 execute_hooks
 
@@ -417,6 +433,8 @@ set_manifest_version "${RELEASE_VERSION}"
 commit_and_push_release_version "${RELEASE_VERSION}"
 
 # Prepare next development cycle
-merge_main_into_develop
+if [ -n "${DEV_BRANCH}" ]; then
+  merge_main_into_develop
+fi
 set_manifest_version "${DEVELOPMENT_VERSION}"
 commit_and_push_development_version
